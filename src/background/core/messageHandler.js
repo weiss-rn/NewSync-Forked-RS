@@ -139,6 +139,7 @@ export class MessageHandler {
         lyrics: message.jsonLyrics,
         timestamp: Date.now()
       });
+      LyricsService.invalidateLocalLyricsCache();
       sendResponse({ success: true, message: "Local lyrics uploaded successfully", songId });
     } catch (error) {
       console.error("Error uploading local lyrics:", error);
@@ -169,6 +170,7 @@ export class MessageHandler {
   static async deleteLocalLyrics(message, sendResponse) {
     try {
       await localLyricsDB.delete(message.songId);
+      LyricsService.invalidateLocalLyricsCache();
       sendResponse({ success: true, message: "Local lyrics deleted successfully" });
     } catch (error) {
       console.error("Error deleting local lyrics:", error);
@@ -199,4 +201,3 @@ export class MessageHandler {
     }
   }
 }
-

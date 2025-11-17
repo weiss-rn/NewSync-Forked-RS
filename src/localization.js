@@ -1232,29 +1232,91 @@ const translations = {
 };
 
 function getUserLanguage() {
-    // Get the browser's language, default to 'en-US' if not available.
-    const userLang = document.documentElement.lang || 'en-US';
+    // Determine user language using a few browser signals, normalize to compare with
+    // `translations` keys (case-insensitive, accept `_` or `-`) and fallback to 'en-US'.
+    let rawLang = document.documentElement?.lang || navigator?.language || (navigator?.languages && navigator.languages[0]) || 'en-US';
+    if (typeof rawLang !== 'string') rawLang = String(rawLang || 'en-US');
+    const normalized = rawLang.replace('_', '-').trim();
+    const lowerNormalized = normalized.toLowerCase();
 
-    if (userLang in translations) {
-        return userLang;
-    }
-    const baseLang = userLang.split('-')[0];
-
-    if (baseLang in translations) {
-        return baseLang;
-    }
-
+    // Try exact match (case-insensitive)
     for (const key in translations) {
-        if (key.startsWith(baseLang + '-')) {
-            return key; // Return the first matching dialect we find.
-        }
+        if (key.toLowerCase() === lowerNormalized) return key;
     }
 
-    //If no match could be found at all, return the ultimate default.
+    // Try base language (e.g., 'en')
+    const baseLang = lowerNormalized.split('-')[0];
+    for (const key in translations) {
+        if (key.toLowerCase() === baseLang) return key;
+    }
+
+    // Try dialects, return the first matching dialect found for the base language
+    for (const key in translations) {
+        if (key.toLowerCase().startsWith(baseLang + '-')) return key;
+    }
+
     return 'en-US';
 }
 
+/**
+ * Return true if the supplied translation string is a safe plain text candidate.
+ * It avoids returning strings with replacement chars (U+FFFD) or control codepoints.
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isValidTranslationString(value) {
+    if (typeof value !== 'string') return false;
+    if (value.includes('\uFFFD')) return false;
+    return !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value);
+}
+
+/**
+ * Translate a key to the active language, falling back to `en-US` and then the
+ * supplied key if no translation exists. Lookup is tolerant to common case
+ * mismatches for convenience.
+ * @param {string} key
+ * @returns {string}
+ */
 function t(key) {
     const lang = getUserLanguage();
-    return translations[lang]?.[key] || translations['en-US'][key];
+    if (typeof key !== 'string') return '';
+    // Prefer exact key first; then try lowercase to be more tolerant with callers.
+    const normalizedKey = key;
+    const lowerKey = key.toLowerCase();
+
+    let localized = translations[lang]?.[normalizedKey] ?? translations[lang]?.[lowerKey];
+    if (isValidTranslationString(localized)) return localized;
+
+    // Fallback to en-US
+    localized = translations['en-US']?.[normalizedKey] ?? translations['en-US']?.[lowerKey];
+    if (isValidTranslationString(localized)) return localized;
+
+    // If nothing matches, return the requested key to make debugging easier.
+    return key;
+}
+
+// Expose the translator on a window-scoped namespace to be consumed by other scripts
+// running in the page context (content scripts can use it safely without polluting globals).
+if (typeof window !== 'undefined') {
+    window.__NEWSYNC = window.__NEWSYNC || {};
+    window.__NEWSYNC.t = t;
+    window.__NEWSYNC.getUserLanguage = getUserLanguage;
+}
+
+/**
+ * Developer utility: validate that every locale has the same keys as the default 'en-US'.
+ * Will attach to `window.__NEWSYNC.validateTranslations` for manual invocation.
+ */
+function validateTranslations() {
+    const baseKeys = new Set(Object.keys(translations['en-US'] || {}));
+    const results = {};
+    for (const locale in translations) {
+        const missing = [...baseKeys].filter(k => !(k in translations[locale]));
+        if (missing.length) results[locale] = missing;
+    }
+    return results;
+}
+
+if (typeof window !== 'undefined') {
+    window.__NEWSYNC.validateTranslations = validateTranslations;
 }

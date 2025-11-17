@@ -72,24 +72,21 @@ export class LyricsService {
   }
 
   static async checkLocalLyrics(songInfo) {
-    const localLyricsList = await localLyricsDB.getAll();
-    const matched = localLyricsList.find(item =>
-      item.songInfo.title === songInfo.title &&
-      item.songInfo.artist === songInfo.artist
-    );
+    await this.ensureLocalLyricsCache();
+    const key = this.createNormalizedSongKey(songInfo);
+    if (!key) return null;
 
-    if (matched) {
-      const fetchedLocal = await localLyricsDB.get(matched.songId);
-      if (fetchedLocal) {
-        console.log(`Found local lyrics for "${songInfo.title}"`);
-        return {
-          lyrics: DataParser.parseKPoeFormat(fetchedLocal.lyrics),
-          version: fetchedLocal.timestamp || matched.songId
-        };
-      }
+    const cachedEntry = this.localLyricsCache.get(key);
+    if (!cachedEntry) return null;
+
+    if (!cachedEntry.parsedLyrics) {
+      // Record might have been deleted, refresh cache on next call
+      this.localLyricsCache.delete(key);
+      return null;
     }
 
-    return null;
+    const clonedLyrics = JSON.parse(JSON.stringify(cachedEntry.parsedLyrics));
+    return { lyrics: clonedLyrics, version: cachedEntry.version };
   }
 
   static async fetchNewLyrics(songInfo, cacheKey, forceReload) {
@@ -169,5 +166,51 @@ export class LyricsService {
         return null;
     }
   }
+
+  static createNormalizedSongKey(songInfo) {
+    if (!songInfo?.title || !songInfo?.artist) return null;
+    return `${songInfo.title}`.trim().toLowerCase() + '|' + `${songInfo.artist}`.trim().toLowerCase();
+  }
+
+  static async ensureLocalLyricsCache() {
+    if (this.localLyricsLoaded) return;
+    if (!this.localLyricsCachePromise) {
+      this.localLyricsCachePromise = localLyricsDB.getAll()
+        .then(records => {
+          const map = new Map();
+          records.forEach(record => {
+            const key = this.createNormalizedSongKey(record.songInfo);
+            if (!key) return;
+            const parsedLyrics = DataParser.parseKPoeFormat(record.lyrics);
+            if (!parsedLyrics) return;
+            const existing = map.get(key);
+            if (!existing || (record.timestamp || 0) > (existing.timestamp || 0)) {
+              map.set(key, {
+                songId: record.songId,
+                parsedLyrics,
+                version: record.timestamp || record.songId,
+                timestamp: record.timestamp || 0
+              });
+            }
+          });
+          this.localLyricsCache = map;
+          this.localLyricsLoaded = true;
+        })
+        .finally(() => {
+          this.localLyricsCachePromise = null;
+        });
+    }
+
+    return this.localLyricsCachePromise;
+  }
+
+  static invalidateLocalLyricsCache() {
+    this.localLyricsLoaded = false;
+    this.localLyricsCachePromise = null;
+    this.localLyricsCache.clear();
+  }
 }
 
+LyricsService.localLyricsCache = new Map();
+LyricsService.localLyricsLoaded = false;
+LyricsService.localLyricsCachePromise = null;

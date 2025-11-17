@@ -40,16 +40,34 @@ class DatabaseManager {
 
   async set(data) {
     const db = await this.open();
-    const transaction = db.transaction([this.config.store], "readwrite");
-    const store = transaction.objectStore(this.config.store);
-    store.put(data);
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.config.store], "readwrite");
+      const store = transaction.objectStore(this.config.store);
+      const request = store.put(data);
+
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error || request.error);
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async delete(key) {
     const db = await this.open();
-    const transaction = db.transaction([this.config.store], "readwrite");
-    const store = transaction.objectStore(this.config.store);
-    store.delete(key);
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.config.store], "readwrite");
+      const store = transaction.objectStore(this.config.store);
+      const request = store.delete(key);
+
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error || request.error);
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async getAll() {
@@ -66,9 +84,18 @@ class DatabaseManager {
 
   async clear() {
     const db = await this.open();
-    const transaction = db.transaction([this.config.store], "readwrite");
-    const store = transaction.objectStore(this.config.store);
-    store.clear();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.config.store], "readwrite");
+      const store = transaction.objectStore(this.config.store);
+      const request = store.clear();
+
+      transaction.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      transaction.onerror = () => reject(transaction.error || request.error);
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async estimateSize() {
@@ -120,4 +147,3 @@ class DatabaseManager {
 export const lyricsDB = new DatabaseManager(CONFIG.DB.CACHE);
 export const translationsDB = new DatabaseManager(CONFIG.DB.TRANSLATIONS);
 export const localLyricsDB = new DatabaseManager(CONFIG.DB.LOCAL);
-

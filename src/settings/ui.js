@@ -741,32 +741,53 @@ async function populateLocalLyricsList() {
             const listItem = document.createElement('div');
             listItem.className = 'draggable-source-item';
             listItem.dataset.songId = item.songId;
-            listItem.innerHTML = `
-                <span class="material-symbols-outlined drag-handle">music_note</span>
-                <span class="source-name">${item.songInfo.title} - ${item.songInfo.artist}</span>
-                <div class="source-actions">
-                    <button class="edit-source-button btn-icon btn-icon-primary" title="Edit local lyrics">
-                        <span class="material-symbols-outlined">edit</span>
-                    </button>
-                    <button class="remove-source-button btn-icon btn-icon-error" title="Delete local lyrics">
-                        <span class="material-symbols-outlined">delete</span>
-                    </button>
-                </div>
-            `;
+
+            const dragHandle = document.createElement('span');
+            dragHandle.className = 'material-symbols-outlined drag-handle';
+            dragHandle.textContent = 'music_note';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'source-name';
+            const title = item.songInfo?.title || '';
+            const artist = item.songInfo?.artist || '';
+            nameSpan.textContent = `${title} - ${artist}`;
+
+            const actions = document.createElement('div');
+            actions.className = 'source-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'edit-source-button btn-icon btn-icon-primary';
+            editBtn.title = 'Edit local lyrics';
+            const editIcon = document.createElement('span');
+            editIcon.className = 'material-symbols-outlined';
+            editIcon.textContent = 'edit';
+            editBtn.appendChild(editIcon);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-source-button btn-icon btn-icon-error';
+            removeBtn.title = 'Delete local lyrics';
+            const removeIcon = document.createElement('span');
+            removeIcon.className = 'material-symbols-outlined';
+            removeIcon.textContent = 'delete';
+            removeBtn.appendChild(removeIcon);
+
+            actions.appendChild(editBtn);
+            actions.appendChild(removeBtn);
+
+            listItem.appendChild(dragHandle);
+            listItem.appendChild(nameSpan);
+            listItem.appendChild(actions);
             
-            const editBtn = listItem.querySelector('.edit-source-button');
-            if (editBtn) {
-                editBtn.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    try {
-                        await openEditLyricsModal(item);
-                    } catch (error) {
-                        showStatusMessage('local-lyrics-status', `Error loading lyrics for editing: ${error}`, true);
-                    }
-                });
-            }
+            editBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                    await openEditLyricsModal(item);
+                } catch (error) {
+                    showStatusMessage('local-lyrics-status', `Error loading lyrics for editing: ${error}`, true);
+                }
+            });
             
-            listItem.querySelector('.remove-source-button').addEventListener('click', async (e) => {
+            removeBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (confirm(`Are you sure you want to delete "${item.songInfo.title} - ${item.songInfo.artist}"?`)) {
                     try {

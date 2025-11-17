@@ -105,16 +105,36 @@ export class TranslationService {
         ...line,
         translatedText: translatedTexts[index] || line.text
       }));
-    } else {
-      const translationPromises = originalLyrics.data.map(line =>
-        GoogleService.translate(line.text, targetLang)
-      );
-      const translatedTexts = await Promise.all(translationPromises);
-      return originalLyrics.data.map((line, index) => ({
-        ...line,
-        translatedText: translatedTexts[index] || line.text
-      }));
     }
+    
+    return this.translateWithGoogle(originalLyrics, targetLang);
+  }
+
+  static async translateWithGoogle(originalLyrics, targetLang) {
+    const texts = originalLyrics.data.map(line => line.text);
+    const translatedTexts = new Array(texts.length);
+    const workerCount = Math.min(5, Math.max(1, texts.length));
+    let nextIndex = 0;
+
+    const worker = async () => {
+      while (true) {
+        const currentIndex = nextIndex++;
+        if (currentIndex >= texts.length) break;
+        try {
+          translatedTexts[currentIndex] = await GoogleService.translate(texts[currentIndex], targetLang);
+        } catch (error) {
+          console.warn("Google translation failed, falling back to original text:", error);
+          translatedTexts[currentIndex] = texts[currentIndex];
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: workerCount }, worker));
+
+    return originalLyrics.data.map((line, index) => ({
+      ...line,
+      translatedText: translatedTexts[index] || line.text
+    }));
   }
 
   static async romanize(originalLyrics, settings) {
@@ -135,4 +155,3 @@ export class TranslationService {
       : GoogleService.romanize(originalLyrics);
   }
 }
-
