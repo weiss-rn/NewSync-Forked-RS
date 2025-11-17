@@ -96,6 +96,16 @@ Once installed, simply open [YouTube Music](https://music.youtube.com/) and play
 -   **Quick Settings:** Access quick toggles by clicking the NewSync icon in your browser's toolbar.
 -   **Full Settings:** For comprehensive customization, click **"More Settings"** from the popup to open the dedicated settings page.
 
+## Development - TypeScript and Security
+
+- To type-check current JavaScript code with TypeScript (no runtime change):
+```bash
+npm install
+npm run type-check
+```
+- Security notes: Avoid using `innerHTML` for dynamic content; prefer `textContent` or constructing DOM elements. Also review permissions in `manifest.json` and do not commit API keys.
+
+
 ## Acknowledgments
 
 This project is inspired by and built upon the work of talented developers:

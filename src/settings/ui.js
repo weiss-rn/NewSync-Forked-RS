@@ -164,13 +164,26 @@ function createDraggableSourceItem(sourceName) {
     item.className = 'draggable-source-item';
     item.setAttribute('draggable', 'true');
     item.dataset.source = sourceName;
-    item.innerHTML = `
-        <span class="material-symbols-outlined drag-handle">drag_indicator</span>
-        <span class="source-name">${getSourceDisplayName(sourceName)}</span>
-        <button class="remove-source-button btn-icon btn-icon-error" title="Remove source">
-            <span class="material-symbols-outlined">delete</span>
-        </button>
-    `;
+    // Build DOM using safe APIs to avoid potential HTML injection
+    const dragHandle = document.createElement('span');
+    dragHandle.className = 'material-symbols-outlined drag-handle';
+    dragHandle.textContent = 'drag_indicator';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'source-name';
+    nameSpan.textContent = getSourceDisplayName(sourceName);
+
+    const removeButton = document.createElement('button');
+    removeButton.className = 'remove-source-button btn-icon btn-icon-error';
+    removeButton.title = 'Remove source';
+    const removeIcon = document.createElement('span');
+    removeIcon.className = 'material-symbols-outlined';
+    removeIcon.textContent = 'delete';
+    removeButton.appendChild(removeIcon);
+
+    item.appendChild(dragHandle);
+    item.appendChild(nameSpan);
+    item.appendChild(removeButton);
     item.querySelector('.remove-source-button').addEventListener('click', (e) => {
         e.stopPropagation();
         removeSource(sourceName);
