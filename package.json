@@ -1,0 +1,15 @@
+{
+  "name": "newsync-mnr",
+  "version": "2.5.0",
+  "private": true,
+  "description": "NewSync browser extension - enhanced lyrics for music services",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "lint": "echo 'Add ESLint configs to enable linting'",
+    "test": "echo 'No tests configured yet'"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "esbuild": "^0.18.27"
+  }
+}

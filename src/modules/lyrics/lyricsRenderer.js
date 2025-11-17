@@ -1654,9 +1654,12 @@ class LyricsPlusRenderer {
   displaySongNotFound() {
     const container = this._getContainer();
     if (container) {
-      container.innerHTML = `<span class="text-not-found">${t(
-        "notFound"
-      )}</span>`;
+      // Use DOM methods and `textContent` to prevent HTML injection
+      container.innerHTML = "";
+      const notFoundSpan = document.createElement("span");
+      notFoundSpan.className = "text-not-found";
+      notFoundSpan.textContent = t("notFound");
+      container.appendChild(notFoundSpan);
       container.classList.add("lyrics-plus-message");
 
       const buttonsWrapper = document.getElementById("lyrics-plus-buttons-wrapper");
@@ -1677,9 +1680,11 @@ class LyricsPlusRenderer {
   displaySongError() {
     const container = this._getContainer();
     if (container) {
-      container.innerHTML = `<span class="text-not-found">${t(
-        "notFoundError"
-      )}</span>`;
+      container.innerHTML = "";
+      const errSpan = document.createElement("span");
+      errSpan.className = "text-not-found";
+      errSpan.textContent = t("notFoundError");
+      container.appendChild(errSpan);
       container.classList.add("lyrics-plus-message");
 
       const buttonsWrapper = document.getElementById("lyrics-plus-buttons-wrapper");
@@ -2808,7 +2813,11 @@ class LyricsPlusRenderer {
         });
       }
 
-      container.innerHTML = `<span class="text-loading">${t("loading")}</span>`;
+      container.innerHTML = "";
+      const loadingSpan = document.createElement("span");
+      loadingSpan.className = "text-loading";
+      loadingSpan.textContent = t("loading");
+      container.appendChild(loadingSpan);
       container.classList.add("lyrics-plus-message");
 
       const buttonsWrapper = document.getElementById("lyrics-plus-buttons-wrapper");

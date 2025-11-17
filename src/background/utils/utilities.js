@@ -2,7 +2,16 @@
 // UTILITIES
 // ==================================================================================================
 
+/**
+ * Small set of utilities used across background scripts.
+ * @typedef {import('../../types').SongInfo} SongInfo
+ */
 export class Utilities {
+  /**
+   * Determine whether the provided lyrics object is empty.
+   * @param {object} lyrics - Lyrics object that usually contains a `data` array.
+   * @returns {boolean}
+   */
   static isEmptyLyrics(lyrics) {
     return !lyrics || 
            !lyrics.data || 
@@ -10,10 +19,20 @@ export class Utilities {
            lyrics.data.every(line => !line.text);
   }
 
+  /**
+   * Checks if text contains only Latin script characters and common punctuation.
+   * @param {string} text
+   * @returns {boolean}
+   */
   static isPurelyLatinScript(text) {
     return /^[\p{Script=Latin}\p{N}\p{P}\p{S}\s]*$/u.test(text);
   }
 
+  /**
+   * Normalizes text into a lowercase trimmed token string for comparison.
+   * @param {string} text
+   * @returns {string}
+   */
   static normalizeText(text) {
     return text
       .replace(/\s+/g, ' ')
@@ -22,6 +41,12 @@ export class Utilities {
       .replace(/[^\w\s]/g, '');
   }
 
+  /**
+   * Levenshtein edit distance used for fuzzy comparisons.
+   * @param {string} s1
+   * @param {string} s2
+   * @returns {number}
+   */
   static levenshteinDistance(s1, s2) {
     const track = Array(s2.length + 1)
       .fill(null)
@@ -49,6 +74,11 @@ export class Utilities {
     return track[s2.length][s1.length];
   }
 
+  /**
+   * Async delay helper for backoff, tests and scheduling.
+   * @param {number} ms
+   * @returns {Promise<void>}
+   */
   static delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }

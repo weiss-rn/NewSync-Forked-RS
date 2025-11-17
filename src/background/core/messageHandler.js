@@ -9,7 +9,17 @@ import { LyricsService } from './lyricsService.js';
 import { TranslationService } from './translationService.js';
 import { SponsorBlockService } from '../services/sponsorblockService.js';
 
+/**
+ * @typedef {{type: string, [k: string]: any}} BackgroundMessage
+ * @typedef {(response: any) => void} SendResponse
+ */
 export class MessageHandler {
+  /**
+   * Handle incoming background messages.
+   * @param {BackgroundMessage} message
+   * @param {any} sender
+   * @param {SendResponse} sendResponse
+   */
   static handle(message, sender, sendResponse) {
     const handlers = {
       [MESSAGE_TYPES.FETCH_LYRICS]: () => this.fetchLyrics(message, sendResponse),
@@ -38,6 +48,11 @@ export class MessageHandler {
     return false;
   }
 
+  /**
+   * Fetch lyrics. Expects message.songInfo to be present.
+   * @param {BackgroundMessage} message
+   * @param {SendResponse} sendResponse
+   */
   static async fetchLyrics(message, sendResponse) {
     try {
       const { lyrics } = await LyricsService.getOrFetch(message.songInfo, message.forceReload);
@@ -48,6 +63,11 @@ export class MessageHandler {
     }
   }
 
+  /**
+   * Translate lyrics via the configured translation provider.
+   * @param {BackgroundMessage} message
+   * @param {SendResponse} sendResponse
+   */
   static async translateLyrics(message, sendResponse) {
     try {
       const translatedLyrics = await TranslationService.getOrFetch(
@@ -105,6 +125,11 @@ export class MessageHandler {
     }
   }
 
+  /**
+   * Upload user-provided local lyrics for the current song.
+   * @param {BackgroundMessage} message
+   * @param {SendResponse} sendResponse
+   */
   static async uploadLocalLyrics(message, sendResponse) {
     try {
       const songId = `${message.songInfo.title}-${message.songInfo.artist}-${Date.now()}`;
@@ -136,6 +161,11 @@ export class MessageHandler {
     }
   }
 
+  /**
+   * Delete local lyrics by songId.
+   * @param {BackgroundMessage} message
+   * @param {SendResponse} sendResponse
+   */
   static async deleteLocalLyrics(message, sendResponse) {
     try {
       await localLyricsDB.delete(message.songId);
@@ -146,6 +176,11 @@ export class MessageHandler {
     }
   }
 
+  /**
+   * Returns local lyrics for a provided songId.
+   * @param {BackgroundMessage} message
+   * @param {SendResponse} sendResponse
+   */
   static async fetchLocalLyrics(message, sendResponse) {
     try {
       const localLyrics = await localLyricsDB.get(message.songId);
