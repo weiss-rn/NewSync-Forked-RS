@@ -30,6 +30,7 @@ class LyricsPlusRenderer {
     this.translationButton = null;
     this.reloadButton = null;
     this.dropdownMenu = null;
+    this.statusMessageElement = null;
 
     this.isProgrammaticScrolling = false;
     this.endProgrammaticScrollTimer = null;
@@ -219,6 +220,53 @@ class LyricsPlusRenderer {
     this.lyricsContainer = container;
     this._setupUserScrollListener();
     return container;
+  }
+
+  /**
+   * Shows or clears a compact status message at the top of the lyrics container.
+   * @param {string|null} message - Message to display; clears the status if null/empty.
+   * @param {'info'|'error'} variant - Visual variant for the status badge.
+   */
+  showStatusMessage(message, variant = 'info') {
+    const container = this._getContainer();
+    if (!container) return;
+
+    const normalizedMessage = typeof message === 'string' && message.trim().length > 0
+      ? message.trim()
+      : null;
+
+    if (!normalizedMessage) {
+      if (this.statusMessageElement) {
+        this.statusMessageElement.remove();
+        this.statusMessageElement = null;
+      }
+      return;
+    }
+
+    if (!this.statusMessageElement) {
+      const statusWrapper = document.createElement('div');
+      statusWrapper.className = 'lyrics-plus-status';
+
+      const dot = document.createElement('span');
+      dot.className = 'status-dot';
+
+      const text = document.createElement('span');
+      text.className = 'status-text';
+
+      statusWrapper.appendChild(dot);
+      statusWrapper.appendChild(text);
+
+      this.statusMessageElement = statusWrapper;
+      container.prepend(statusWrapper);
+    }
+
+    this.statusMessageElement.classList.toggle('error', variant === 'error');
+    this.statusMessageElement.classList.toggle('info', variant !== 'error');
+
+    const textNode = this.statusMessageElement.querySelector('.status-text');
+    if (textNode) {
+      textNode.textContent = normalizedMessage;
+    }
   }
 
   /**
@@ -2860,6 +2908,10 @@ class LyricsPlusRenderer {
     // --- DOM Elements Cleanup ---
     const container = this._getContainer();
     if (container) {
+      if (this.statusMessageElement) {
+        this.statusMessageElement.remove();
+        this.statusMessageElement = null;
+      }
       if (this.cachedLyricsLines) {
         this.cachedLyricsLines.forEach((line) => {
           if (line && line._cachedSyllableElements) {

@@ -63,6 +63,44 @@
     height: 100%;
 }
 
+.lyrics-plus-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: var(--lyplus-padding-gap);
+    padding: 8px 12px;
+    border-radius: var(--lyplus-border-radius-base);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--lyplus-text-primary);
+    font-size: var(--lyplus-font-size-subtext);
+}
+
+.lyrics-plus-status .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--lyplus-text-secondary);
+}
+
+.lyrics-plus-status.info {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.lyrics-plus-status.error {
+    border-color: rgba(255, 107, 107, 0.5);
+    background: rgba(255, 107, 107, 0.08);
+    color: #ffd7d7;
+}
+
+.lyrics-plus-status.error .status-dot {
+    background: #ff8a8a;
+}
+
+.lyrics-plus-status.info .status-dot {
+    background: var(--lyplus-text-secondary);
+}
+
 /* --- Scroll Behavior & Performance --- */
 #lyrics-plus-container-parent {
     --lyrics-scroll-padding-top: 25%;

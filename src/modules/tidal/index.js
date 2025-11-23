@@ -11,7 +11,8 @@ const LyricsPlusAPI = {
   displaySongNotFound: () => lyricsRendererInstance?.displaySongNotFound(),
   displaySongError: () => lyricsRendererInstance?.displaySongError(),
   cleanupLyrics: () => lyricsRendererInstance?.cleanupLyrics(),
-  updateDisplayMode: (...args) => lyricsRendererInstance?.updateDisplayMode(...args)
+  updateDisplayMode: (...args) => lyricsRendererInstance?.updateDisplayMode(...args),
+  showStatusMessage: (...args) => lyricsRendererInstance?.showStatusMessage(...args)
 };
 
 function injectPlatformCSS() {

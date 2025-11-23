@@ -73,6 +73,27 @@ function combineLyricsData(baseLyrics, translation, romanization) {
 }
 
 /**
+ * Resolves the best-effort target language for translation/romanization requests.
+ * Prefers the document language, then browser language, and finally falls back to English.
+ * @returns {string}
+ */
+function resolveTargetLanguage() {
+  const htmlLang = document.documentElement.getAttribute('lang');
+  if (htmlLang && typeof htmlLang === 'string' && htmlLang.trim().length > 0) {
+    return htmlLang.trim();
+  }
+
+  const navigatorLang = typeof navigator !== 'undefined'
+    ? (navigator.language || (navigator.languages && navigator.languages[0]))
+    : null;
+  if (navigatorLang && typeof navigatorLang === 'string' && navigatorLang.length > 0) {
+    return navigatorLang.split('-')[0];
+  }
+
+  return 'en';
+}
+
+/**
  * Determines the final display mode for the renderer based on user's intent and available data.
  * @param {string} intendedMode - The mode the user wants ('none', 'translate', 'romanize', 'both').
  * @param {boolean} hasTranslation - Whether translation data was successfully fetched.
@@ -150,15 +171,15 @@ async function fetchAndDisplayLyrics(currentSong, isNewSong = false, forceReload
     let baseLyrics = originalLyricsResponse.lyrics;
 
     // --- 4. Fetch Additional Data (Translation/Romanization) in Parallel ---
-    const htmlLang = document.documentElement.getAttribute('lang');
+    const targetLang = resolveTargetLanguage();
     const promises = [];
-    
+
     const needsTranslation = effectiveMode === 'translate' || effectiveMode === 'both';
     const needsRomanization = effectiveMode === 'romanize' || effectiveMode === 'both' || currentSettings.largerTextMode === "romanization";
 
     if (needsTranslation) {
       promises.push(pBrowser.runtime.sendMessage({
-        type: 'TRANSLATE_LYRICS', action: 'translate', songInfo: currentSong, targetLang: htmlLang
+        type: 'TRANSLATE_LYRICS', action: 'translate', songInfo: currentSong, targetLang
       }));
     } else {
       promises.push(Promise.resolve(null));
@@ -166,7 +187,7 @@ async function fetchAndDisplayLyrics(currentSong, isNewSong = false, forceReload
 
     if (needsRomanization) {
       promises.push(pBrowser.runtime.sendMessage({
-        type: 'TRANSLATE_LYRICS', action: 'romanize', songInfo: currentSong, targetLang: htmlLang
+        type: 'TRANSLATE_LYRICS', action: 'romanize', songInfo: currentSong, targetLang
       }));
     } else {
       promises.push(Promise.resolve(null));
@@ -181,6 +202,21 @@ async function fetchAndDisplayLyrics(currentSong, isNewSong = false, forceReload
 
     const hasTranslation = translationResponse?.success && translationResponse.translatedLyrics;
     const hasRomanization = romanizationResponse?.success && romanizationResponse.translatedLyrics;
+
+    if (LyricsPlusAPI.showStatusMessage) {
+      const statusMessages = [];
+      if (needsTranslation && !hasTranslation) {
+        statusMessages.push(`Translation unavailable for ${targetLang}; showing original lyrics.`);
+      }
+      if (needsRomanization && !hasRomanization) {
+        statusMessages.push('Romanization unavailable for this track; showing original text.');
+      }
+
+      LyricsPlusAPI.showStatusMessage(
+        statusMessages.length ? statusMessages.join(' ') : null,
+        statusMessages.length ? 'error' : 'info'
+      );
+    }
 
     // --- 5. Combine Data & Determine Final Display Mode ---
     var lyricsObjectToDisplay = combineLyricsData(

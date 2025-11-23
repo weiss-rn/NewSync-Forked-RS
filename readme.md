@@ -21,6 +21,11 @@
 
 NewSync is a feature-rich browser extension that brings synchronized lyrics to YouTube Music with an elegant Apple Music-inspired interface. Experience your favorite songs like never before with real-time lyrics display, smart translations, and beautiful visual effects. Enjoy perfectly synchronized lyrics that follow your music with line-by-line and word-by-word highlighting, sleek minimal design with premium fonts and custom icons, and instant translation capabilities using Google Translate or Gemini AI.
 
+## Improvements in this fork
+
+- Automatic language detection fallback that keeps translation and romanization requests working even when the page does not expose a `lang` attribute.
+- Inline status badges above the lyric panel that let you know when translation or romanization data is unavailable while still showing the original lyrics.
+
 <p align="center">
     <b>Supported Browsers:</b>
 <br>
