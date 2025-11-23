@@ -105,16 +105,36 @@ export class TranslationService {
         ...line,
         translatedText: translatedTexts[index] || line.text
       }));
-    } else {
-      const translationPromises = originalLyrics.data.map(line =>
-        GoogleService.translate(line.text, targetLang)
-      );
-      const translatedTexts = await Promise.all(translationPromises);
-      return originalLyrics.data.map((line, index) => ({
-        ...line,
-        translatedText: translatedTexts[index] || line.text
-      }));
     }
+    
+    return this.translateWithGoogle(originalLyrics, targetLang);
+  }
+
+  static async translateWithGoogle(originalLyrics, targetLang) {
+    const texts = originalLyrics.data.map(line => line.text);
+    const translatedTexts = new Array(texts.length);
+    const workerCount = Math.min(5, Math.max(1, texts.length));
+    let nextIndex = 0;
+
+    const worker = async () => {
+      while (true) {
+        const currentIndex = nextIndex++;
+        if (currentIndex >= texts.length) break;
+        try {
+          translatedTexts[currentIndex] = await GoogleService.translate(texts[currentIndex], targetLang);
+        } catch (error) {
+          console.warn("Google translation failed, falling back to original text:", error);
+          translatedTexts[currentIndex] = texts[currentIndex];
+        }
+      }
+    };
+
+    await Promise.all(Array.from({ length: workerCount }, worker));
+
+    return originalLyrics.data.map((line, index) => ({
+      ...line,
+      translatedText: translatedTexts[index] || line.text
+    }));
   }
 
   static async romanize(originalLyrics, settings) {
@@ -129,10 +149,41 @@ export class TranslationService {
     }
 
     const useGemini = settings.romanizationProvider === PROVIDERS.GEMINI && settings.geminiApiKey;
-    
-    return useGemini
-      ? GeminiService.romanize(originalLyrics, settings)
-      : GoogleService.romanize(originalLyrics);
+
+    if (useGemini) {
+      return GeminiService.romanize(originalLyrics, settings);
+    }
+
+    // Try Google first, fallback to Gemini if available and Google appears to have failed
+    const googleResult = await GoogleService.romanize(originalLyrics);
+
+    // Check if Google actually succeeded (results should differ from input for non-Latin scripts)
+    const allResultsSameAsInput = originalLyrics.data.every((line, index) => {
+      const resultLine = googleResult[index];
+      if (!resultLine) return true;
+
+      // For line-by-line: check if romanizedText is same as text
+      if (resultLine.romanizedText && resultLine.romanizedText.trim() === line.text.trim()) {
+        return true;
+      }
+
+      // For word-by-word: check if all syllables have same romanizedText as text
+      if (resultLine.syllabus && line.syllabus) {
+        return resultLine.syllabus.every((syl, sylIndex) => {
+          const originalSyl = line.syllabus[sylIndex];
+          return !originalSyl || !syl.romanizedText || syl.romanizedText.trim() === originalSyl.text.trim();
+        });
+      }
+
+      return false;
+    });
+
+    // If all results are same as input and we have Gemini API key, try Gemini as fallback
+    if (allResultsSameAsInput && settings.geminiApiKey) {
+      console.warn("Google romanization appears to have failed (all results same as input), attempting Gemini fallback");
+      return GeminiService.romanize(originalLyrics, settings);
+    }
+
+    return googleResult;
   }
 }
-
