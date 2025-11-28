@@ -12,6 +12,45 @@ import { GoogleService } from '../services/googleService.js';
 import { GeminiService } from '../gemini/geminiService.js';
 
 export class TranslationService {
+  static normalizeLanguageCode(lang) {
+    if (!lang || typeof lang !== 'string') return '';
+    return lang.trim().toLowerCase().split(/[-_]/)[0];
+  }
+
+  static async detectSourceLanguage(originalLyrics) {
+    const sampleTexts = originalLyrics?.data
+      ?.map(line => line.text)
+      .filter(Boolean)
+      .slice(0, 5);
+
+    if (!sampleTexts?.length) return null;
+
+    try {
+      const joined = sampleTexts.join('\n');
+      const detectUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(joined)}`;
+      const response = await fetch(detectUrl);
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      const detectedLang = data?.[2];
+
+      return typeof detectedLang === 'string' ? detectedLang.toLowerCase() : null;
+    } catch (error) {
+      console.warn("TranslationService: Language detection failed, proceeding without optimization", error);
+      return null;
+    }
+  }
+
+  static annotateCacheHit(translatedLyrics, cacheSource) {
+    if (!translatedLyrics.translationMeta) {
+      translatedLyrics.translationMeta = {};
+    }
+    translatedLyrics.translationMeta.cached = true;
+    translatedLyrics.translationMeta.cacheSource = cacheSource;
+    translatedLyrics.translationMeta.lastServedAt = Date.now();
+    return translatedLyrics;
+  }
+
   static createCacheKey(songInfo, action, targetLang) {
     const baseLyricsCacheKey = LyricsService.createCacheKey(songInfo);
     return `${baseLyricsCacheKey} - ${action} - ${targetLang}`;
@@ -32,19 +71,57 @@ export class TranslationService {
       if (cached) return cached;
     }
 
+    if (!forceReload && state.hasOngoingFetch(translatedKey)) {
+      return state.getOngoingFetch(translatedKey);
+    }
+
+    const translationPromise = this.performAndCacheTranslation(
+      translatedKey,
+      originalLyrics,
+      originalVersion,
+      action,
+      targetLang
+    );
+
+    state.setOngoingFetch(translatedKey, translationPromise);
+    
+    try {
+      return await translationPromise;
+    } finally {
+      state.deleteOngoingFetch(translatedKey);
+    }
+  }
+
+  static async performAndCacheTranslation(translatedKey, originalLyrics, originalVersion, action, targetLang) {
     const settings = await SettingsManager.getTranslationSettings();
-    const actualTargetLang = settings.overrideTranslateTarget && settings.customTranslateTarget
+    const resolvedTargetLang = settings.overrideTranslateTarget && settings.customTranslateTarget
       ? settings.customTranslateTarget
       : targetLang;
 
-    const translatedData = await this.performTranslation(
+    const translationResult = await this.performTranslation(
       originalLyrics,
       action,
-      actualTargetLang,
+      resolvedTargetLang,
       settings
     );
 
-    const finalTranslatedLyrics = { ...originalLyrics, data: translatedData };
+    const meta = translationResult.meta || {};
+
+    const finalTranslatedLyrics = {
+      ...originalLyrics,
+      data: translationResult.data || originalLyrics.data,
+      translationMeta: {
+        action,
+        provider: meta.provider || 'unknown',
+        targetLang: this.normalizeLanguageCode(resolvedTargetLang) || resolvedTargetLang,
+        requestedTargetLang: targetLang,
+        sourceLang: meta.sourceLang || 'auto',
+        fallbackUsed: meta.fallbackUsed || false,
+        skippedReason: meta.skippedReason || null,
+        failedLines: meta.failedLines || [],
+        generatedAt: Date.now()
+      }
+    };
 
     state.setCached(translatedKey, {
       translatedLyrics: finalTranslatedLyrics,
@@ -65,7 +142,7 @@ export class TranslationService {
     if (state.hasCached(key)) {
       const cached = state.getCached(key);
       if (cached.originalVersion === originalVersion) {
-        return cached.translatedLyrics;
+        return this.annotateCacheHit(cached.translatedLyrics, 'memory');
       }
     }
 
@@ -76,7 +153,7 @@ export class TranslationService {
           translatedLyrics: dbCached.translatedLyrics,
           originalVersion: dbCached.originalVersion
         });
-        return dbCached.translatedLyrics;
+        return this.annotateCacheHit(dbCached.translatedLyrics, 'db');
       } else {
         await translationsDB.delete(key);
       }
@@ -92,22 +169,61 @@ export class TranslationService {
       return this.romanize(originalLyrics, settings);
     }
     
-    return originalLyrics.data;
+    return {
+      data: originalLyrics.data,
+      meta: {
+        provider: 'passthrough',
+        sourceLang: null,
+        failedLines: []
+      }
+    };
   }
 
   static async translate(originalLyrics, targetLang, settings) {
     const useGemini = settings.translationProvider === PROVIDERS.GEMINI && settings.geminiApiKey;
-    
-    if (useGemini) {
-      const textsToTranslate = originalLyrics.data.map(line => line.text);
-      const translatedTexts = await GeminiService.translate(textsToTranslate, targetLang, settings);
-      return originalLyrics.data.map((line, index) => ({
-        ...line,
-        translatedText: translatedTexts[index] || line.text
-      }));
+    const sourceLang = await this.detectSourceLanguage(originalLyrics);
+    const normalizedTarget = this.normalizeLanguageCode(targetLang);
+
+    const meta = {
+      provider: useGemini ? PROVIDERS.GEMINI : PROVIDERS.GOOGLE,
+      sourceLang: sourceLang || 'auto',
+      fallbackUsed: false,
+      skippedReason: null,
+      failedLines: []
+    };
+
+    if (sourceLang && normalizedTarget && sourceLang === normalizedTarget) {
+      meta.provider = 'pass-through';
+      meta.skippedReason = 'source-matches-target';
+
+      return {
+        data: originalLyrics.data.map(line => ({ ...line, translatedText: line.text })),
+        meta
+      };
     }
     
-    return this.translateWithGoogle(originalLyrics, targetLang);
+    if (useGemini) {
+      try {
+        const textsToTranslate = originalLyrics.data.map(line => line.text);
+        const translatedTexts = await GeminiService.translate(textsToTranslate, targetLang, settings);
+        return {
+          data: this.mergeTranslatedTexts(originalLyrics, translatedTexts),
+          meta
+        };
+      } catch (error) {
+        console.warn("Gemini translation failed, falling back to Google:", error);
+        meta.fallbackUsed = true;
+        meta.provider = PROVIDERS.GOOGLE;
+      }
+    }
+    
+    const googleResult = await this.translateWithGoogle(originalLyrics, targetLang);
+    meta.failedLines = googleResult.failedIndices;
+
+    return {
+      data: googleResult.data,
+      meta
+    };
   }
 
   static async translateWithGoogle(originalLyrics, targetLang) {
@@ -115,6 +231,7 @@ export class TranslationService {
     const translatedTexts = new Array(texts.length);
     const workerCount = Math.min(5, Math.max(1, texts.length));
     let nextIndex = 0;
+    const failedIndices = new Set();
 
     const worker = async () => {
       while (true) {
@@ -124,6 +241,7 @@ export class TranslationService {
           translatedTexts[currentIndex] = await GoogleService.translate(texts[currentIndex], targetLang);
         } catch (error) {
           console.warn("Google translation failed, falling back to original text:", error);
+          failedIndices.add(currentIndex);
           translatedTexts[currentIndex] = texts[currentIndex];
         }
       }
@@ -131,10 +249,10 @@ export class TranslationService {
 
     await Promise.all(Array.from({ length: workerCount }, worker));
 
-    return originalLyrics.data.map((line, index) => ({
-      ...line,
-      translatedText: translatedTexts[index] || line.text
-    }));
+    return {
+      data: this.mergeTranslatedTexts(originalLyrics, translatedTexts),
+      failedIndices: Array.from(failedIndices)
+    };
   }
 
   static async romanize(originalLyrics, settings) {
@@ -143,15 +261,28 @@ export class TranslationService {
       line.romanizedText || (line.syllabus && line.syllabus.some(syl => syl.romanizedText))
     );
 
+    const meta = {
+      provider: settings.romanizationProvider === PROVIDERS.GEMINI && settings.geminiApiKey
+        ? PROVIDERS.GEMINI
+        : PROVIDERS.GOOGLE,
+      sourceLang: null,
+      fallbackUsed: false,
+      skippedReason: null,
+      failedLines: []
+    };
+
     if (hasPrebuilt) {
       console.log("Using prebuilt romanization");
-      return originalLyrics.data;
+      meta.provider = 'prebuilt';
+      meta.skippedReason = 'prebuilt-romanization';
+      return { data: originalLyrics.data, meta };
     }
 
     const useGemini = settings.romanizationProvider === PROVIDERS.GEMINI && settings.geminiApiKey;
 
     if (useGemini) {
-      return GeminiService.romanize(originalLyrics, settings);
+      const data = await GeminiService.romanize(originalLyrics, settings);
+      return { data, meta };
     }
 
     // Try Google first, fallback to Gemini if available and Google appears to have failed
@@ -181,9 +312,19 @@ export class TranslationService {
     // If all results are same as input and we have Gemini API key, try Gemini as fallback
     if (allResultsSameAsInput && settings.geminiApiKey) {
       console.warn("Google romanization appears to have failed (all results same as input), attempting Gemini fallback");
-      return GeminiService.romanize(originalLyrics, settings);
+      meta.fallbackUsed = true;
+      meta.provider = PROVIDERS.GEMINI;
+      const geminiResult = await GeminiService.romanize(originalLyrics, settings);
+      return { data: geminiResult, meta };
     }
 
-    return googleResult;
+    return { data: googleResult, meta };
+  }
+
+  static mergeTranslatedTexts(originalLyrics, translatedTexts) {
+    return originalLyrics.data.map((line, index) => ({
+      ...line,
+      translatedText: translatedTexts[index] || line.text
+    }));
   }
 }

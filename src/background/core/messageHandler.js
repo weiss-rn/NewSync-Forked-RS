@@ -21,6 +21,12 @@ export class MessageHandler {
    * @param {SendResponse} sendResponse
    */
   static handle(message, sender, sendResponse) {
+    if (!message || !message.type) {
+      console.warn("Invalid message received:", message);
+      sendResponse({ success: false, error: "Invalid message: missing type" });
+      return false;
+    }
+
     const handlers = {
       [MESSAGE_TYPES.FETCH_LYRICS]: () => this.fetchLyrics(message, sendResponse),
       [MESSAGE_TYPES.RESET_CACHE]: () => this.resetCache(sendResponse),
@@ -30,7 +36,8 @@ export class MessageHandler {
       [MESSAGE_TYPES.UPLOAD_LOCAL_LYRICS]: () => this.uploadLocalLyrics(message, sendResponse),
       [MESSAGE_TYPES.GET_LOCAL_LYRICS_LIST]: () => this.getLocalLyricsList(sendResponse),
       [MESSAGE_TYPES.DELETE_LOCAL_LYRICS]: () => this.deleteLocalLyrics(message, sendResponse),
-      [MESSAGE_TYPES.FETCH_LOCAL_LYRICS]: () => this.fetchLocalLyrics(message, sendResponse)
+      [MESSAGE_TYPES.FETCH_LOCAL_LYRICS]: () => this.fetchLocalLyrics(message, sendResponse),
+      [MESSAGE_TYPES.UPDATE_LOCAL_LYRICS]: () => this.updateLocalLyrics(message, sendResponse)
     };
 
     const handler = handlers[message.type];
@@ -157,6 +164,34 @@ export class MessageHandler {
       sendResponse({ success: true, lyricsList: mappedList });
     } catch (error) {
       console.error("Error getting local lyrics list:", error);
+      sendResponse({ success: false, error: error.message });
+    }
+  }
+
+  static async updateLocalLyrics(message, sendResponse) {
+    try {
+      const existingLyrics = await localLyricsDB.get(message.songId);
+      if (!existingLyrics) {
+        sendResponse({ success: false, error: "No lyrics found for the provided songId" });
+        return;
+      }
+
+      const updatedRecord = {
+        songId: message.songId,
+        songInfo: message.songInfo || existingLyrics.songInfo,
+        lyrics: message.jsonLyrics,
+        timestamp: existingLyrics.timestamp || Date.now()
+      };
+
+      await localLyricsDB.set(updatedRecord);
+      sendResponse({
+        success: true,
+        message: "Local lyrics updated successfully",
+        lyrics: updatedRecord.lyrics,
+        metadata: updatedRecord.songInfo
+      });
+    } catch (error) {
+      console.error("Error updating local lyrics:", error);
       sendResponse({ success: false, error: error.message });
     }
   }

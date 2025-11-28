@@ -17,7 +17,15 @@ export class LyricsService {
     return `${songInfo.title} - ${songInfo.artist} - ${songInfo.album} - ${songInfo.duration}`;
   }
 
+  static validateSongInfo(songInfo) {
+    if (!songInfo || !songInfo.title || !songInfo.artist) {
+      throw new Error('Song info must include title and artist');
+    }
+  }
+
   static async getOrFetch(songInfo, forceReload = false) {
+    this.validateSongInfo(songInfo);
+
     const cacheKey = this.createCacheKey(songInfo);
 
     if (!forceReload && state.hasCached(cacheKey)) {
@@ -72,6 +80,16 @@ export class LyricsService {
   }
 
   static async checkLocalLyrics(songInfo) {
+    if (songInfo.songId) {
+      const directLocal = await localLyricsDB.get(songInfo.songId);
+      if (directLocal) {
+        return {
+          lyrics: DataParser.parseKPoeFormat(directLocal.lyrics),
+          version: directLocal.timestamp || songInfo.songId
+        };
+      }
+    }
+
     const localLyricsList = await localLyricsDB.getAll();
     const matched = localLyricsList.find(item =>
       item.songInfo.title === songInfo.title &&
@@ -114,13 +132,25 @@ export class LyricsService {
         throw new Error('No lyrics found from any provider');
       }
 
-      const version = Date.now();
-      const result = { lyrics, version };
+      const fetchedAt = Date.now();
+      const lyricsWithMeta = {
+        ...lyrics,
+        metadata: { ...(lyrics.metadata || {}), fetchedAt }
+      };
+
+      const version = fetchedAt;
+      const result = { lyrics: lyricsWithMeta, version };
 
       state.setCached(cacheKey, result);
       
       if (settings.cacheStrategy !== 'none') {
-        await lyricsDB.set({ key: cacheKey, lyrics, version, timestamp: Date.now(), duration: songInfo.duration });
+        await lyricsDB.set({
+          key: cacheKey,
+          lyrics: lyricsWithMeta,
+          version,
+          timestamp: fetchedAt,
+          duration: songInfo.duration
+        });
       }
 
       return result;
@@ -135,9 +165,13 @@ export class LyricsService {
       p => p !== PROVIDERS.GOOGLE && p !== PROVIDERS.GEMINI
     );
     
+    const preferredProvider = allProviders.includes(settings.lyricsProvider)
+      ? settings.lyricsProvider
+      : PROVIDERS.KPOE;
+    
     return [
-      settings.lyricsProvider,
-      ...allProviders.filter(p => p !== settings.lyricsProvider)
+      preferredProvider,
+      ...allProviders.filter(p => p !== preferredProvider)
     ];
   }
 
