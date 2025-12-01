@@ -1,6 +1,6 @@
 {
-  "name": "newsync-mnr",
-  "version": "2.5.0",
+  "name": "newsync-forked-rs",
+  "version": "2.5.7EX",
   "private": true,
   "description": "NewSync browser extension - enhanced lyrics for music services",
   "scripts": {
